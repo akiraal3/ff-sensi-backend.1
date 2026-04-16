@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IA Sensibilidade FF PRO</title>
+
+<style>
+body {
+    margin:0;
+    font-family: Arial;
+    background:#0a0a0a;
+    color:white;
+}
+
+.container {
+    max-width:900px;
+    margin:auto;
+    padding:20px;
+}
+
+h1 {
+    text-align:center;
+    color:#a855f7;
+}
+
+.card {
+    background:#1a1a1a;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:15px;
+}
+
+input, select {
+    width:100%;
+    padding:10px;
+    margin-top:5px;
+    border-radius:6px;
+    border:none;
+    background:#262626;
+    color:white;
+}
+
+button {
+    width:100%;
+    padding:12px;
+    background:#a855f7;
+    border:none;
+    border-radius:8px;
+    color:white;
+    font-weight:bold;
+}
+
+.result {
+    font-size:18px;
+}
+
+.good {color:#00ff88;}
+.medium {color:#ffaa00;}
+.bad {color:#ff4444;}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>IA Sensibilidade FF PRO</h1>
+
+<div class="card">
+
+<label>Modelo do celular</label>
+<input id="modelo">
+
+<label>Gameplay</label>
+<select id="gameplay">
+<option>rush</option>
+<option>mix</option>
+<option>camper</option>
+</select>
+
+<label>Puxada</label>
+<select id="puxada">
+<option>rápido</option>
+<option>médio</option>
+<option>lento</option>
+</select>
+
+<label>Preferência</label>
+<select id="pref">
+<option>leve</option>
+<option>média</option>
+<option>pesada</option>
+</select>
+
+<label>Erro</label>
+<select id="erro">
+<option>normal</option>
+<option>passando</option>
+<option>peito</option>
+<option>tremendo</option>
+<option>lenta</option>
+<option>não sobe</option>
+</select>
+
+<button onclick="calcular()">GERAR SENSI</button>
+
+</div>
+
+<div class="card result" id="resultado"></div>
+
+<div class="card">
+<button onclick="feedback('boa')">👍 Boa</button>
+<button onclick="feedback('media')">😐 Média</button>
+<button onclick="feedback('ruim')">👎 Ruim</button>
+</div>
+
+</div>
+
+<script>
+
+// 🔑 API
+const API_KEY = "ca5a2eec3103ef75c9418922229067195204bd0e";
+
+// 📱 BUSCAR DISPOSITIVO
+async function buscarCelular(modelo){
+    try{
+        const res = await fetch(`https://api.mobileapi.dev/devices/search?name=${modelo}&key=${API_KEY}`);
+        const data = await res.json();
+
+        const device = Array.isArray(data) ? data[0] : data;
+
+        if(!device || !device.name) throw "erro";
+
+        return normalizar(device);
+
+    }catch{
+        return fallback(modelo);
+    }
+}
+
+// 🔄 NORMALIZAR
+function normalizar(d){
+    return {
+        modelo: d.name,
+        cpu: d.hardware || "unknown",
+        hz: extrairHz(d.screen_resolution),
+        dpi: estimarDPI(d.name),
+        so: detectarSO(d.name),
+        fps: estimarFPS(d.hardware),
+        tela: 6.5
+    };
+}
+
+// 🧠 IA BASE
+function estimarFPS(cpu){
+    if(!cpu) return 50;
+    cpu = cpu.toLowerCase();
+    if(cpu.includes("snapdragon 8") || cpu.includes("a15")) return 60;
+    if(cpu.includes("dimensity")) return 55;
+    return 45;
+}
+
+function detectarSO(nome){
+    return nome.toLowerCase().includes("iphone") ? "iOS" : "Android";
+}
+
+function extrairHz(t){
+    if(!t) return 60;
+    if(t.includes("144")) return 144;
+    if(t.includes("120")) return 120;
+    return 60;
+}
+
+function estimarDPI(n){
+    if(n.toLowerCase().includes("iphone")) return 460;
+    return 400;
+}
+
+// 🛟 FALLBACK
+function fallback(modelo){
+    return {
+        modelo,
+        cpu:"estimado",
+        hz:60,
+        dpi:400,
+        so:"Android",
+        fps:50,
+        tela:6.5
+    };
+}
+
+// ⚙️ FATORES
+function fatorFPS(f){ return f>=60 ? 1.05 : 1; }
+function fatorHZ(h){ return Math.min(h/60,1.5); }
+function fatorDPI(d){ return d<300?1.1:d>400?0.9:1; }
+function fatorPuxada(p){ return {rápido:0.85,médio:1,lento:1.15}[p]; }
+function fatorEstilo(e){ return {rush:1.1,mix:1,camper:0.9}[e]; }
+function fatorPref(p){ return {leve:1.15,média:1,pesada:0.85}[p]; }
+function fatorSO(s){ return s=="iOS"?0.95:1; }
+
+// 🎯 ERRO
+function aplicarErro(v,e){
+    if(e=="passando") return v*0.9;
+    if(e=="peito") return v*1.1;
+    if(e=="tremendo") return v*0.8;
+    if(e=="lenta") return v*1.15;
+    if(e=="não sobe") return v*1.12;
+    return v;
+}
+
+function limitar(v){
+    return Math.max(50, Math.min(200, Math.round(v)));
+}
+
+// 🚀 CALCULAR
+async function calcular(){
+
+    let modelo = document.getElementById("modelo").value;
+
+    let d = await buscarCelular(modelo);
+
+    let sens = 120;
+
+    sens *= fatorFPS(d.fps);
+    sens *= fatorHZ(d.hz);
+    sens *= fatorDPI(d.dpi);
+    sens *= fatorPuxada(document.getElementById("puxada").value);
+    sens *= fatorEstilo(document.getElementById("gameplay").value);
+    sens *= fatorPref(document.getElementById("pref").value);
+    sens *= fatorSO(d.so);
+
+    sens = aplicarErro(sens, document.getElementById("erro").value);
+
+    let geral = limitar(sens);
+
+    let resultado = {
+        geral,
+        red: limitar(geral*0.9),
+        x2: limitar(geral*0.8),
+        x4: limitar(geral*0.7),
+        awm: limitar(geral*0.5),
+        cam: limitar(geral*1.2)
+    };
+
+    document.getElementById("resultado").innerHTML = `
+    Geral: ${resultado.geral}<br>
+    Red: ${resultado.red}<br>
+    2x: ${resultado.x2}<br>
+    4x: ${resultado.x4}<br>
+    AWM: ${resultado.awm}<br>
+    Câmera: ${resultado.cam}
+    `;
+
+    salvar(resultado);
+}
+
+// 💾 HISTÓRICO
+function salvar(r){
+    let h = JSON.parse(localStorage.getItem("hist")||"[]");
+    h.push(r);
+    localStorage.setItem("hist", JSON.stringify(h));
+}
+
+// 🧠 FEEDBACK IA
+function feedback(t){
+    let h = JSON.parse(localStorage.getItem("hist")||"[]");
+    if(!h.length) return;
+
+    let last = h[h.length-1];
+
+    if(t=="media") last.geral*=1.02;
+    if(t=="ruim") last.geral*=0.9;
+
+    localStorage.setItem("hist", JSON.stringify(h));
+
+    alert("IA ajustada com sucesso");
+}
+
+</script>
+
+</body>
+</html>
